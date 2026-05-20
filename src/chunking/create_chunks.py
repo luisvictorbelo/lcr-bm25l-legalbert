@@ -3,6 +3,7 @@ import pandas as pd
 from transformers import AutoTokenizer
 from tqdm import tqdm
 import os
+import argparse
 
 def chunk_document(doc_id, paragraphs, tokenizer, chunk_size=384, stride=192, min_chunk=80):
     # Join paragraphs with spaces to create a single document text
@@ -46,25 +47,40 @@ def chunk_document(doc_id, paragraphs, tokenizer, chunk_size=384, stride=192, mi
         
     return chunks
 
+def load_data(file_path):
+    if file_path.endswith('.parquet'):
+        return pd.read_parquet(file_path).to_dict('records')
+    elif file_path.endswith('.json'):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path}")
+
 def main():
+    parser = argparse.ArgumentParser(description="Chunk documents into smaller pieces.")
+    parser.add_argument("--inputs", nargs="+", help="Input files (JSON or Parquet).")
+    parser.add_argument("--output", default="data/processed/chunks.parquet", help="Output Parquet file.")
+    args = parser.parse_args()
+
+    # Default values if no args provided (for legacy compatibility)
+    if not args.inputs:
+        args.inputs = [
+            'data/processed/paragraphs/corpus_paragraphs_all.json',
+            'data/processed/paragraphs/query_paragraphs_all.json'
+        ]
+
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained('nlpaueb/legal-bert-base-uncased')
     
-    input_files = [
-        'data/processed/paragraphs/corpus_paragraphs_all.json',
-        'data/processed/paragraphs/query_paragraphs_all.json'
-    ]
-    
     all_chunks = []
     
-    for file_path in input_files:
+    for file_path in args.inputs:
         if not os.path.exists(file_path):
             print(f"Warning: {file_path} not found. Skipping.")
             continue
             
         print(f"Processing {file_path}...")
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        data = load_data(file_path)
         
         # Group by doc_id while preserving order
         docs = {}
@@ -74,7 +90,8 @@ def main():
             if doc_id not in docs:
                 docs[doc_id] = []
                 doc_order.append(doc_id)
-            docs[doc_id].append(item['cleaned_text'])
+            # Use 'cleaned_text' as in the preprocessor output
+            docs[doc_id].append(item.get('cleaned_text', ''))
             
         for doc_id in tqdm(doc_order):
             paragraphs = docs[doc_id]
@@ -87,12 +104,12 @@ def main():
     print(f"Creating DataFrame for {len(all_chunks)} chunks...")
     df = pd.DataFrame(all_chunks)
     
-    output_dir = 'data/processed'
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, 'chunks.parquet')
+    output_dir = os.path.dirname(args.output)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     
-    print(f"Saving to {output_path}...")
-    df.to_parquet(output_path, index=False)
+    print(f"Saving to {args.output}...")
+    df.to_parquet(args.output, index=False)
     print("Done.")
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 
-def find_keys_that_are_also_values(json_path: str):
+def find_keys_that_are_also_values(json_path: Path):
     """
     Return cases that appear both as:
     - dictionary key
@@ -31,7 +31,7 @@ def find_keys_that_are_also_values(json_path: str):
 def main():
     cwd = Path.cwd()
 
-    json_file = cwd / "data" / "labels" / "task1_train_labels_2025.json"  # change path
+    json_file = cwd / "data" / "labels" / "task1_test_labels_2025.json"  # change path
 
     if (json_file.exists() == False):
         print('Arquivo nao encontrado')

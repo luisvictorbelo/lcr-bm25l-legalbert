@@ -1,3 +1,7 @@
-data/processed/paragraphs/
-# Se quiser ignorar toda a pasta data, descomente a linha abaixo:
-# data/
+data
+models
+.agents/docs
+
+__pycache__/
+*.pyc
+*.pyd
