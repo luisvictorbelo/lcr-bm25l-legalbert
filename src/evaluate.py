@@ -46,8 +46,8 @@ def calculate_coliee_metrics(qrels_dict: Dict[str, List[str]], results_dict: Dic
 def main():
     parser = argparse.ArgumentParser(description="Evaluate retrieval results and save a full report.")
     parser.add_argument("--labels", default="data/labels/task1_test_labels_2025.json", help="Path to ground truth labels JSON.")
-    parser.add_argument("--results", default="data/test-files/processed/results.json", help="Path to pipeline results JSON.")
-    parser.add_argument("--output", default="data/test-files/processed/evaluation_report.json", help="Path to save the evaluation report.")
+    parser.add_argument("--results", help="Path to pipeline results JSON.")
+    parser.add_argument("--output", help="Path to save the evaluation report.")
     
     # Metadata arguments
     parser.add_argument("--ft_epochs", type=int, default=3, help="Fine-tuning epochs.")
@@ -59,15 +59,30 @@ def main():
     parser.add_argument("--bm25_method", default="bm25l", help="BM25 method.")
     parser.add_argument("--bm25_k1", type=float, default=3.5, help="BM25 k1.")
     parser.add_argument("--bm25_b", type=float, default=1.0, help="BM25 b.")
+    parser.add_argument("--model_name", default="legal_bert", help="Dense model name.")
+    parser.add_argument("--alpha", type=float, default=0.5, help="Alpha weight used.")
     
     args = parser.parse_args()
 
+    # Dynamic paths if not provided
+    if not args.results or not args.output:
+        method_name = args.query_method.lower().replace('-', '_')
+        portion_str = f"_p{args.query_portion}" if args.query_method not in ["Proposition", "MarkedParagraph"] else ""
+        dynamic_name = f"{method_name}{portion_str}_{args.bm25_method}_k1_{args.bm25_k1}_b_{args.bm25_b}_a{args.alpha}_{args.model_name.lower()}"
+        
+        if not args.results:
+            args.results = f'data/evaluation/results_{dynamic_name}.json'
+        
+        if not args.output:
+            args.output = f'data/evaluation/report_{dynamic_name}.json'
+
+    # Ensure output dir exists
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+
     # 1. Load Data
-    with open(args.labels, 'r', encoding='utf-8') as f:
-        labels_raw = json.load(f)
-    
-    with open(args.results, 'r', encoding='utf-8') as f:
-        results_raw = json.load(f)
+    if not os.path.exists(args.results):
+        print(f"Error: Results file not found at {args.results}")
+        return
 
     qrels_dict = {normalize_doc_id(q_id): [normalize_doc_id(d) for d in pos_list] for q_id, pos_list in labels_raw.items()}
     results_dict = {normalize_doc_id(q_id): [{"doc_id": normalize_doc_id(r['doc_id']), "score": r['score']} for r in res_list] for q_id, res_list in results_raw.items()}
@@ -103,7 +118,8 @@ def main():
             },
             "reranking": {
                 "method": "max_chunk_similarity",
-                "alpha": 0.5
+                "alpha": args.alpha,
+                "model": args.model_name
             }
         },
         "results": {}

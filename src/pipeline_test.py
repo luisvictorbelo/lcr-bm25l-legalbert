@@ -12,6 +12,7 @@ from src.query_extractor.keybert_extractor import KeyBERTQueryExtractor
 from src.query_extractor.plm_extractor import PLMQueryExtractor
 from src.query_extractor.tfidf_extractor import TFIDFQueryExtractor
 from src.query_extractor.proposition_extractor import PropositionQueryExtractor
+from src.query_extractor.marked_paragraph_extractor import MarkedParagraphQueryExtractor
 import bm25s
 
 def cosine_similarity(A, B):
@@ -41,11 +42,13 @@ def min_max_normalize(scores):
 
 def main():
     parser = argparse.ArgumentParser(description="Run the retrieval and reranking pipeline.")
-    parser.add_argument("--query_method", choices=["KLI", "KeyBERT", "PLM", "TF-IDF", "Proposition"], default="KLI", help="Method for query extraction.")
+    parser.add_argument("--query_method", choices=["KLI", "KeyBERT", "PLM", "TF-IDF", "Proposition", "MarkedParagraph"], default="KLI", help="Method for query extraction.")
     parser.add_argument("--propositions_file", type=str, default='data/test-files/processed/query_propositions_saul.parquet', help="Path to LLM-generated propositions file (Parquet).")
+    parser.add_argument("--marked_paragraphs_file", type=str, default='data/test-files/processed/query_marked_paragraphs.parquet', help="Path to raw marked paragraphs file (Parquet).")
     parser.add_argument("--portion", type=float, default=0.5, help="Portion of top terms to select for the query.")
     parser.add_argument("--alpha", type=float, default=0.5, help="Weight for BM25 score in hybrid combination.")
     parser.add_argument("--top_k_bm25", type=int, default=100, help="Number of documents to retrieve via BM25.")
+    parser.add_argument("--model_name", type=str, default="legal_bert", help="Name of the dense model used for reranking.")
     args = parser.parse_args()
 
     print(f"Configuration: method={args.query_method}, portion={args.portion}, alpha={args.alpha}")
@@ -93,6 +96,9 @@ def main():
     elif args.query_method == "Proposition":
         print("Initializing Proposition Extractor...")
         extractor = PropositionQueryExtractor(args.propositions_file)
+    elif args.query_method == "MarkedParagraph":
+        print("Initializing Marked Paragraph Extractor...")
+        extractor = MarkedParagraphQueryExtractor(args.marked_paragraphs_file)
     else:
         print("Initializing KeyBERT Extractor...")
         extractor = KeyBERTQueryExtractor()
@@ -104,7 +110,7 @@ def main():
 
     for query_doc_id in tqdm(unique_query_ids, desc="Processing Queries"):
         # 1. Extract Query / Subqueries
-        if args.query_method == "Proposition":
+        if args.query_method in ["Proposition", "MarkedParagraph"]:
             subqueries = extractor.get_subqueries(query_doc_id)
             if not subqueries:
                 continue
@@ -186,7 +192,19 @@ def main():
         all_pipeline_results[query_doc_id] = query_results
 
     # Save to JSON
-    output_results_path = 'data/test-files/processed/results.json'
+    # Construct dynamic filename
+    method_name = args.query_method.lower().replace('-', '_')
+    # BM25 params from retriever
+    bm25_info = f"{retriever.method}_k1_{retriever.k1}_b_{retriever.b}"
+    
+    # Optional portion for certain methods
+    portion_str = f"_p{args.portion}" if args.query_method not in ["Proposition", "MarkedParagraph"] else ""
+    
+    dynamic_name = f"{method_name}{portion_str}_{bm25_info}_a{args.alpha}_{args.model_name.lower()}"
+    output_dir = 'data/evaluation'
+    os.makedirs(output_dir, exist_ok=True)
+    output_results_path = os.path.join(output_dir, f'results_{dynamic_name}.json')
+    
     print(f"\nSaving all results to {output_results_path}...")
     with open(output_results_path, 'w', encoding='utf-8') as f:
         json.dump(all_pipeline_results, f, indent=2)
