@@ -45,7 +45,7 @@ def main():
     parser.add_argument("--query_method", choices=["KLI", "KeyBERT", "PLM", "TF-IDF", "Proposition", "MarkedParagraph"], default="KLI", help="Method for query extraction.")
     parser.add_argument("--propositions_file", type=str, default='data/test-files/processed/query_propositions_saul.parquet', help="Path to LLM-generated propositions file (Parquet).")
     parser.add_argument("--marked_paragraphs_file", type=str, default='data/test-files/processed/query_marked_paragraphs.parquet', help="Path to raw marked paragraphs file (Parquet).")
-    parser.add_argument("--portion", type=float, default=0.5, help="Portion of top terms to select for the query.")
+    parser.add_argument("--portion", type=float, default=0.6, help="Portion of top terms to select for the query.")
     parser.add_argument("--alpha", type=float, default=0.5, help="Weight for BM25 score in hybrid combination.")
     parser.add_argument("--top_k_bm25", type=int, default=100, help="Number of documents to retrieve via BM25.")
     parser.add_argument("--model_name", type=str, default="legal_bert", help="Name of the dense model used for reranking.")
@@ -119,10 +119,15 @@ def main():
             doc_scores_map = defaultdict(float)
             
             for subquery_text in subqueries:
-                # Tokenize and retrieve
-                query_tokens = bm25s.tokenize(subquery_text, stopwords='en')[0]
-                # Use k=300 for subqueries as per research to ensure coverage
-                sub_results, sub_scores = retriever.retrieve([list(query_tokens)], k=300)
+                # Tokenize and retrieve. tokenize expects a list of strings and returns a Tokenized object.
+                query_tokens_batch = bm25s.tokenize([subquery_text], stopwords='en')
+                
+                # Check if the first (and only) query in the batch has tokens
+                if len(query_tokens_batch[0]) == 0:
+                    continue
+                
+                # retriever.retrieve accepts the Tokenized object directly
+                sub_results, sub_scores = retriever.retrieve(query_tokens_batch, k=300)
                 
                 for i in range(sub_results.shape[1]):
                     idx = int(sub_results[0, i])

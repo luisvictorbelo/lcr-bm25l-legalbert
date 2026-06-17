@@ -55,7 +55,7 @@ def main():
     parser.add_argument("--ft_batch_size", type=int, default=16, help="Fine-tuning batch size.")
     parser.add_argument("--ft_warmup", type=float, default=0.1, help="Fine-tuning warmup ratio.")
     parser.add_argument("--query_method", default="KLI", help="Query extraction method.")
-    parser.add_argument("--query_portion", type=float, default=0.5, help="Query extraction portion.")
+    parser.add_argument("--query_portion", type=float, default=0.6, help="Query extraction portion.")
     parser.add_argument("--bm25_method", default="bm25l", help="BM25 method.")
     parser.add_argument("--bm25_k1", type=float, default=3.5, help="BM25 k1.")
     parser.add_argument("--bm25_b", type=float, default=1.0, help="BM25 b.")
@@ -83,6 +83,12 @@ def main():
     if not os.path.exists(args.results):
         print(f"Error: Results file not found at {args.results}")
         return
+
+    with open(args.labels, 'r', encoding='utf-8') as f:
+        labels_raw = json.load(f)
+    
+    with open(args.results, 'r', encoding='utf-8') as f:
+        results_raw = json.load(f)
 
     qrels_dict = {normalize_doc_id(q_id): [normalize_doc_id(d) for d in pos_list] for q_id, pos_list in labels_raw.items()}
     results_dict = {normalize_doc_id(q_id): [{"doc_id": normalize_doc_id(r['doc_id']), "score": r['score']} for r in res_list] for q_id, res_list in results_raw.items()}
