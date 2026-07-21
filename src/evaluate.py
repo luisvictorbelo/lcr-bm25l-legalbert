@@ -153,7 +153,35 @@ def main():
         print(f"{k:<4} | {coliee['precision']:.4f} | {coliee['recall']:.4f} | {coliee['f1']:.4f} | "
               f"{ranx_scores[f'mrr@{k}']:.4f} | {ranx_scores[f'ndcg@{k}']:.4f} | {ranx_scores[f'map@{k}']:.4f}")
 
+    # Load companion stats if available
+    results_dir = os.path.dirname(args.results)
+    results_basename = os.path.basename(args.results)
+    if results_basename.startswith("results_"):
+        stats_basename = results_basename.replace("results_", "stats_", 1)
+    else:
+        stats_basename = f"stats_{results_basename}"
+    stats_path = os.path.join(results_dir, stats_basename)
+    
+    stats_data = {}
+    if os.path.exists(stats_path):
+        try:
+            with open(stats_path, 'r', encoding='utf-8') as f:
+                stats_data = json.load(f)
+        except Exception as e:
+            print(f"Warning: Failed to load stats file at {stats_path}: {e}")
+            
+    if stats_data:
+        report_data["resources"] = {
+            "execution_time_seconds": stats_data.get("execution_time_seconds"),
+            "avg_time_per_query_ms": stats_data.get("avg_time_per_query_ms"),
+            "num_queries": stats_data.get("num_queries")
+        }
+
     print("="*80)
+    if stats_data:
+        print(f"Pipeline Execution Time: {stats_data.get('execution_time_seconds'):.2f} seconds")
+        print(f"Average Time per Query : {stats_data.get('avg_time_per_query_ms'):.2f} ms")
+        print("="*80)
     
     # Save Report
     with open(args.output, 'w', encoding='utf-8') as f:

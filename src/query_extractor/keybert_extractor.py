@@ -1,6 +1,7 @@
 import math
 import pandas as pd
 from tqdm import tqdm
+from nltk.stem import PorterStemmer
 try:
     from keybert import KeyBERT
 except ImportError:
@@ -18,6 +19,7 @@ class KeyBERTQueryExtractor:
             raise ImportError("The 'keybert' library is not installed. Please install it with: pip install keybert")
         print(f"Initializing KeyBERT model: {model_name}...")
         self.kw_model = KeyBERT(model=model_name)
+        self.stemmer = PorterStemmer()
 
     def extract_queries(
         self, 
@@ -60,29 +62,33 @@ class KeyBERTQueryExtractor:
         for doc_id, paragraphs in tqdm(doc_paragraphs_map.items(), desc='KeyBERT: processing query docs'):
             best_keyword_score = {}
             
-            # Extract keywords for each paragraph
-            for text in paragraphs:
-                # KeyBERT might fail on extremely short text or if there are no alpha chars
-                try:
-                    keywords = self.kw_model.extract_keywords(
-                        text,
+            # Extract keywords for all paragraphs in a single batch
+            try:
+                valid_paragraphs = [p for p in paragraphs if p.strip()]
+                if valid_paragraphs:
+                    batch_keywords = self.kw_model.extract_keywords(
+                        valid_paragraphs,
                         stop_words='english',
                         top_n=top_n_per_paragraph,
                         diversity=diversity,
                         use_mmr=True
                     )
-                except Exception as e:
-                    # print(f"Warning: KeyBERT failed on paragraph in {doc_id}: {e}")
-                    continue
-                
-                # Update best scores
-                for keyword, score in keywords:
-                    normalized = keyword.strip().lower()
-                    if not normalized:
-                        continue
+                    
+                    # KeyBERT returns a list of tuples if input size is 1
+                    if len(valid_paragraphs) == 1:
+                        batch_keywords = [batch_keywords]
                         
-                    if normalized not in best_keyword_score or score > best_keyword_score[normalized]:
-                        best_keyword_score[normalized] = float(score)
+                    for keywords in batch_keywords:
+                        for keyword, score in keywords:
+                            normalized = keyword.strip().lower()
+                            if not normalized:
+                                continue
+                                
+                            if normalized not in best_keyword_score or score > best_keyword_score[normalized]:
+                                best_keyword_score[normalized] = float(score)
+            except Exception as e:
+                # print(f"Warning: KeyBERT failed on paragraphs for {doc_id}: {e}")
+                pass
 
             # Sort keywords by max score descending
             sorted_keywords = sorted(
@@ -97,7 +103,7 @@ class KeyBERTQueryExtractor:
                 continue
                 
             n_selected = max(1, int(math.ceil(len(sorted_keywords) * portion)))
-            selected_terms = [kw for kw, _ in sorted_keywords[:n_selected]]
+            selected_terms = [self.stemmer.stem(kw) for kw, _ in sorted_keywords[:n_selected]]
             top_terms_by_doc[doc_id] = selected_terms
 
         print(f"KeyBERT queries extracted for {len(top_terms_by_doc)} documents.")

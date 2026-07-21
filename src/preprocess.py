@@ -346,7 +346,7 @@ if __name__ == '__main__':
     print(f"Arquivo de labels: {LABELS_FILE}")
     print(f"Pasta de saida: {OUTPUT_DIR}")
     
-    preprocessor = LegalDocumentPreprocessor(use_spacy=True)
+    preprocessor = LegalDocumentPreprocessor(use_spacy=False)
     pipeline = PreprocessorPipeline(preprocessor)
     
     pipeline.process_and_save(

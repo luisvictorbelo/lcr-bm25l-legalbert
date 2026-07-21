@@ -46,7 +46,7 @@ def main():
 
         # 3. Read generated report
         method_name_file = method.lower().replace('-', '_')
-        portion_str = f"_p0.5" if method not in ["Proposition", "MarkedParagraph"] else ""
+        portion_str = f"_p0.6" if method not in ["Proposition", "MarkedParagraph"] else ""
         dynamic_name = f"{method_name_file}{portion_str}_bm25l_k1_3.5_b_1.0_a{alpha}_legal_bert"
         report_path = f"data/evaluation/report_{dynamic_name}.json"
         

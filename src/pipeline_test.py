@@ -6,6 +6,7 @@ import os
 import argparse
 from tqdm import tqdm
 from collections import defaultdict
+from nltk.stem import PorterStemmer
 from src.bm25_retriever import BM25Manager
 from src.query_extractor.kli import KLIQueryExtractor
 from src.query_extractor.keybert_extractor import KeyBERTQueryExtractor
@@ -82,6 +83,7 @@ def main():
     all_pipeline_results = {}
     
     print(f"\n--- Starting full pipeline for {len(unique_query_ids)} queries using {args.query_method} ---")
+    start_time = time.perf_counter()
     
     # 1. Initialize Extractor
     if args.query_method == "KLI":
@@ -108,6 +110,9 @@ def main():
     bm25_manager = BM25Manager()
     retriever, corpus_doc_ids = bm25_manager.load_index(index_path)
 
+    stemmer = PorterStemmer()
+    stemmer_fn = lambda lst: [stemmer.stem(w) for w in lst]
+
     for query_doc_id in tqdm(unique_query_ids, desc="Processing Queries"):
         # 1. Extract Query / Subqueries
         if args.query_method in ["Proposition", "MarkedParagraph"]:
@@ -120,7 +125,7 @@ def main():
             
             for subquery_text in subqueries:
                 # Tokenize and retrieve. tokenize expects a list of strings and returns a Tokenized object.
-                query_tokens_batch = bm25s.tokenize([subquery_text], stopwords='en')
+                query_tokens_batch = bm25s.tokenize([subquery_text], stopwords='en', stemmer=stemmer_fn)
                 
                 # Check if the first (and only) query in the batch has tokens
                 if len(query_tokens_batch[0]) == 0:
@@ -214,6 +219,21 @@ def main():
     with open(output_results_path, 'w', encoding='utf-8') as f:
         json.dump(all_pipeline_results, f, indent=2)
     
+    # Track resource usage and save stats
+    end_time = time.perf_counter()
+    execution_time_seconds = end_time - start_time
+    avg_time_per_query_ms = (execution_time_seconds / len(unique_query_ids)) * 1000 if unique_query_ids else 0.0
+    
+    output_stats_path = os.path.join(output_dir, f'stats_{dynamic_name}.json')
+    stats = {
+        "execution_time_seconds": execution_time_seconds,
+        "avg_time_per_query_ms": avg_time_per_query_ms,
+        "num_queries": len(unique_query_ids)
+    }
+    print(f"Saving resource stats to {output_stats_path}...")
+    with open(output_stats_path, 'w', encoding='utf-8') as f:
+        json.dump(stats, f, indent=2)
+        
     print("Full pipeline execution completed.")
 
 if __name__ == "__main__":
